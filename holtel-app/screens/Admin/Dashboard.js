@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } fr
 // ถ้าใช้ react-native-chart-kit สำหรับ doughnut chart บน web ให้ import แบบนี้
 // import { Doughnut } from 'react-chartjs-2';
 import { AuthContext } from '../AuthContext';
+import theme from '../../utils/theme';
 import { useNavigation } from '@react-navigation/native';
 
 // ถ้าไม่ได้ใช้ chart ให้คอมเมนต์ section กราฟออก
@@ -62,18 +63,18 @@ const AdminDashboard = () => {
   // };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Admin Dashboard</Text>
-      <Text style={styles.subHeader}>สรุปสถานะรีพอร์ต</Text>
+    <View style={[styles.container, { backgroundColor: theme.background }] }>
+      <Text style={[styles.header, { color: theme.text }]}>Admin Dashboard</Text>
+      <Text style={[styles.subHeader, { color: theme.muted }]}>สรุปสถานะรีพอร์ต</Text>
       {loading ? (
-        <ActivityIndicator size="large" style={{marginTop: 40}} />
+        <ActivityIndicator size="large" style={{marginTop: 40}} color={theme.primary} />
       ) : (
         <View>
           <View style={styles.statusRow}>
-            <View style={styles.statusCard}>
-              <Text style={[styles.statusLabel, {color: STATUS_COLOR.new}]}>{STATUS_LABEL.new}</Text>
-              <Text style={styles.statusCount}>{stats.new}</Text>
-            </View>
+            <View style={[styles.statusCard, {backgroundColor: theme.card}] }>
+                <Text style={[styles.statusLabel, {color: STATUS_COLOR.new}]}>{STATUS_LABEL.new}</Text>
+                <Text style={styles.statusCount}>{stats.new}</Text>
+              </View>
             <View style={styles.statusCard}>
               <Text style={[styles.statusLabel, {color: STATUS_COLOR['in-progress']}]}>{STATUS_LABEL['in-progress']}</Text>
               <Text style={styles.statusCount}>{stats['in-progress']}</Text>
@@ -91,16 +92,10 @@ const AdminDashboard = () => {
           </View> */}
 
           <TouchableOpacity
-            style={styles.linkBtn}
-            onPress={() => navigation.navigate('AdminReportList')}
+            style={[styles.linkBtn, { backgroundColor: theme.primary }]}
+            onPress={() => navigation.navigate('AdminReports')}
           >
-            <Text style={styles.linkBtnText}>ดูรายการรีพอร์ตทั้งหมด</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.linkBtnSecondary}
-            onPress={() => navigation.navigate('AdminStatistic')}
-          >
-            <Text style={styles.linkBtnText2}>ดูสถิติ/กราฟเพิ่มเติม</Text>
+            <Text style={[styles.linkBtnText, { color: '#fff' }]}>ดูรายการรีพอร์ตทั้งหมด</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -112,15 +107,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 18,
-    backgroundColor: '#f8fafc',
+    backgroundColor: theme.background,
   },
   header: {
     fontSize: 26,
     fontWeight: 'bold',
-    color: '#1976d2',
+    color: theme.primary,
     textAlign: 'center',
     marginBottom: 10,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   subHeader: {
     fontSize: 18,
@@ -136,10 +131,10 @@ const styles = StyleSheet.create({
   statusCard: {
     alignItems: 'center',
     padding: 18,
-    backgroundColor: '#fff',
+    backgroundColor: theme.card,
     borderRadius: 12,
     minWidth: 100,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+  boxShadow: '0 2px 6px rgba(43,198,207,0.12)',
   },
   statusLabel: {
     fontSize: 15,
@@ -149,7 +144,7 @@ const styles = StyleSheet.create({
   statusCount: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#1976d2',
+    color: theme.primary,
   },
   totalText: {
     textAlign: 'center',
@@ -158,7 +153,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   linkBtn: {
-    backgroundColor: '#1976d2',
+    backgroundColor: theme.primary,
     padding: 12,
     borderRadius: 10,
     marginHorizontal: 30,

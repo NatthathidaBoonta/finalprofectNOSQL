@@ -1,7 +1,10 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, Button, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, Button, TouchableOpacity, Alert } from 'react-native';
+import Input from '../components/Input';
 import axios from 'axios';
 import { AuthContext } from './AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import theme from '../utils/theme';
 
 const AuthScreen = () => {
   const { setAuth } = useContext(AuthContext);
@@ -24,6 +27,13 @@ const AuthScreen = () => {
     try {
       if (mode === 'login') {
         const res = await axios.post('http://localhost:5001/api/login', { username, password });
+        // Persist token and user for session persistence
+        try {
+          await AsyncStorage.setItem('token', res.data.token);
+          await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
+        } catch (e) {
+          console.warn('Failed to persist auth to storage', e);
+        }
         setAuth({
           user: res.data.user,
           token: res.data.token,
@@ -45,20 +55,22 @@ const AuthScreen = () => {
   };
 
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-      <Text style={{ fontSize: 32, marginBottom: 24 }}>{mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</Text>
-      <TextInput placeholder="Username" value={username} onChangeText={setUsername} style={{ width: 250, borderWidth: 1, marginBottom: 8, padding: 8 }} />
-      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={{ width: 250, borderWidth: 1, marginBottom: 8, padding: 8 }} />
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: theme.background }}>
+      <Text style={{ fontSize: 32, marginBottom: 24, color: theme.primary }}>{mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</Text>
+  <Input placeholder="Username" value={username} onChangeText={setUsername} style={{ width: 300 }} />
+  <Input placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={{ width: 300 }} />
       {mode === 'register' && (
         <>
-          <TextInput placeholder="ยืนยันรหัสผ่าน" value={confirm} onChangeText={setConfirm} secureTextEntry style={{ width: 250, borderWidth: 1, marginBottom: 8, padding: 8 }} />
-          <TextInput placeholder="ชื่อ-นามสกุล" value={name} onChangeText={setName} style={{ width: 250, borderWidth: 1, marginBottom: 8, padding: 8 }} />
-          <TextInput placeholder="หมายเลขห้อง" value={room_id} onChangeText={setRoomId} style={{ width: 250, borderWidth: 1, marginBottom: 8, padding: 8 }} />
+          <Input placeholder="ยืนยันรหัสผ่าน" value={confirm} onChangeText={setConfirm} secureTextEntry style={{ width: 250 }} />
+          <Input placeholder="ชื่อ-นามสกุล" value={name} onChangeText={setName} style={{ width: 250 }} />
+          <Input placeholder="หมายเลขห้อง" value={room_id} onChangeText={setRoomId} style={{ width: 250 }} />
         </>
       )}
-      <Button title={mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'} onPress={handleSubmit} />
+      <TouchableOpacity onPress={handleSubmit} style={{ width: 300, backgroundColor: theme.primary, padding: 12, borderRadius: 8, alignItems: 'center' }}>
+        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}</Text>
+      </TouchableOpacity>
       <TouchableOpacity onPress={() => setMode(mode === 'login' ? 'register' : 'login')}>
-        <Text style={{ marginTop: 16, color: 'blue' }}>
+        <Text style={{ marginTop: 16, color: theme.primary }}>
           {mode === 'login' ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}
         </Text>
       </TouchableOpacity>

@@ -1,163 +1,131 @@
-import React, { useEffect, useState } from 'react';
-
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useState, useContext } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import axios from 'axios';
-import { useNavigation } from '@react-navigation/native';
+import { AuthContext } from '../AuthContext';
+import theme from '../../utils/theme';
+import ScreenContainer from '../../components/ScreenContainer';
+import Card from '../../components/Card';
 
-// Dashboard สามารถเข้าถึงได้โดยไม่ต้องเข้าสู่ระบบ
 const Dashboard = () => {
-  
-  const [rooms, setRooms] = useState([]);
+  const { auth } = useContext(AuthContext);
+  const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeFloor, setActiveFloor] = useState(1);
-  const navigation = useNavigation();
 
   useEffect(() => {
-    const fetchRooms = async () => {
+    const fetchRoom = async () => {
       try {
-        const res = await axios.get('http://localhost:5001/api/rooms');
-        // map id ให้ FlatList มี key ที่ unique
-        const mappedRooms = res.data.map(r => ({ ...r, id: r._id || r.id }));
-        setRooms(mappedRooms);
+        if (!auth || !auth.user || !auth.user.room_number) return;
+        const res = await axios.get(`http://localhost:5001/api/rooms/${auth.user.room_number}`);
+        setRoom(res.data);
       } catch (err) {
-        // handle error
+        setRoom(null);
       } finally {
         setLoading(false);
       }
     };
-    fetchRooms();
-  }, []);
-
-  const floors = [1, 2, 3];
-  const roomsByFloor = floors.map(floor => ({
-    floor,
-    rooms: rooms.filter(r => r.floor === floor)
-  }));
+    fetchRoom();
+  }, [auth]);
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background }}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>🏢 ห้องพักทั้งหมด</Text>
-      <View style={styles.tabRow}>
-        <View style={styles.tabBtnRow}>
-          {floors.map(floor => (
-            <Pressable
-              key={floor}
-              style={[styles.tabBtn, activeFloor === floor && styles.tabBtnActive]}
-              onPress={() => setActiveFloor(floor)}
-            >
-              <Text style={activeFloor === floor ? styles.tabTextActive : styles.tabText}>ชั้น {floor}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <FlatList
-          data={roomsByFloor.find(r => r.floor === activeFloor)?.rooms || []}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.roomCard}
-              onPress={() => navigation.navigate('RoomDetailScreen', { room: item })}
-            >
-              <View style={styles.roomHeader}>
-                <Text style={styles.roomIcon}>🚪</Text>
-                <Text style={styles.roomNumber}>ห้อง {item.room_number}</Text>
+    <ScreenContainer>
+      <Text style={styles.title}>รายละเอียดห้องของคุณ</Text>
+
+      {!room ? (
+        <Card style={styles.emptyCard}>
+          <Text style={styles.emptyText}>ไม่พบข้อมูลห้องของคุณ</Text>
+        </Card>
+      ) : (
+        <Card style={styles.roomCard}>
+          <Text style={styles.roomNumber}>ห้อง {room.room_number}</Text>
+          <View style={{ width: '100%', marginBottom: 8 }}>
+            <Text style={styles.facilityText}><Text style={styles.labelBold}>อุปกรณ์ในห้อง:</Text></Text>
+            {room.facilities && room.facilities.length > 0 ? (
+              <View style={styles.chipsContainer}>
+                {room.facilities.map((f, i) => (
+                  <View key={i} style={styles.chip}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.chipText}>{f}</Text>
+                  </View>
+                ))}
               </View>
-              <Text style={styles.facilityText}>
-                <Text style={{ fontWeight: 'bold' }}>อุปกรณ์:</Text> {item.facilities && item.facilities.length > 0 ? item.facilities.join(', ') : 'ไม่มีข้อมูล'}
-              </Text>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={<Text style={styles.emptyText}>ไม่มีห้องในชั้นนี้</Text>}
-        />
-      </View>
-    </View>
+            ) : (
+              <Text style={styles.emptyText}>ไม่มีข้อมูล</Text>
+            )}
+          </View>
+          <Text style={styles.facilityText}>
+            <Text style={styles.labelBold}>ชั้น: </Text>
+            {room.floor}
+          </Text>
+        </Card>
+      )}
+    </ScreenContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 10,
-    backgroundColor: '#f7faff',
-  },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 18,
-    color: '#1976d2',
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 16,
+    color: theme.primary,
     textAlign: 'center',
-    letterSpacing: 1,
-  },
-  tabRow: {
-    marginTop: 8,
-  },
-  tabBtnRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  tabBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 18,
-    backgroundColor: '#e3f2fd',
-    marginHorizontal: 6,
-  },
-  tabBtnActive: {
-    backgroundColor: '#1976d2',
-  },
-  tabText: {
-    color: '#1976d2',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  tabTextActive: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
+    letterSpacing: 0.6,
   },
   roomCard: {
-    backgroundColor: '#fff',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 8,
-    flexDirection: 'column',
-    // ใช้ boxShadow สำหรับ web แทน shadow*
-    // boxShadow ไม่ error ใน RN Web, แต่ RN Mobile จะไม่เห็น effect
-    // elevation เฉพาะ Android
-    boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-    elevation: 1,
+    padding: 20,
+    borderRadius: 14,
+    alignItems: 'flex-start',
   },
-  roomHeader: {
-    flexDirection: 'row',
+  emptyCard: {
+    padding: 24,
+    borderRadius: 14,
     alignItems: 'center',
-    marginBottom: 6,
-  },
-  roomIcon: {
-    fontSize: 20,
-    marginRight: 8,
   },
   roomNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1976d2',
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.primary,
+    marginBottom: 10,
   },
   facilityText: {
     fontSize: 15,
-    color: '#333',
+    color: theme.text,
+    marginBottom: 8,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  chip: {
+    backgroundColor: theme.secondary,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  chipText: {
+    color: theme.primary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  labelBold: {
+    fontWeight: '700',
+    color: theme.muted,
   },
   emptyText: {
-    color: 'gray',
+    color: theme.muted,
     fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 6,
   },
 });
 

@@ -1,18 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import { AuthContext } from '../AuthContext';
+import theme from '../../utils/theme';
 
 function formatDate(dateString) {
   const d = new Date(dateString);
   return d.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+const STATUS_LABEL = {
+  new: 'รอรับเรื่อง',
+  'in-progress': 'กำลังดำเนินการ',
+  done: 'สำเร็จแล้ว',
+};
+
 const RoomDetailScreen = () => {
   const route = useRoute();
-  // รับ room_number จาก navigation param
-  const roomNumber = route.params?.room_number || route.params?.room?.room_number;
+  const { auth } = useContext(AuthContext);
+  // รับ room_number จาก navigation param หรือจาก user
+  const roomNumber = route.params?.room_number || route.params?.room?.room_number || auth?.user?.room_number;
 
-  const [stats, setStats] = useState(null);
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -23,57 +32,47 @@ const RoomDetailScreen = () => {
       return;
     }
     setLoading(true);
-    fetch(`http://localhost:5001/api/rooms/${roomNumber}/statistics`)
+    fetch(`http://localhost:5001/api/reports?room_number=${roomNumber}`, {
+      headers: { Authorization: `Bearer ${auth?.token || ''}` },
+    })
       .then(res => res.json())
       .then(data => {
-        setStats(data);
+        setReports(data);
         setLoading(false);
       })
       .catch(() => {
         setError('เกิดข้อผิดพลาดในการดึงข้อมูล');
         setLoading(false);
       });
-  }, [roomNumber]);
+  }, [roomNumber, auth]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>รายละเอียดห้อง {roomNumber}</Text>
-      {loading && <ActivityIndicator size="large" style={{ marginTop: 30 }} />}
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.background }]}>
+      <Text style={[styles.header, { color: theme.primary }]}>รายการแจ้งซ่อมห้อง {roomNumber}</Text>
+      {loading && <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 30 }} />}
       {error ? (
         <Text style={styles.error}>{error}</Text>
-      ) : stats && (
+      ) : (
         <View>
           <Text style={styles.statText}>
             <Text style={{ fontWeight: 'bold' }}>จำนวนครั้งที่แจ้งซ่อม: </Text>
-            {stats.totalReports}
+            {reports.length}
           </Text>
           <Text style={styles.sectionTitle}>รายการแจ้งซ่อม</Text>
-          {stats.reportList.length === 0 ? (
+          {reports.length === 0 ? (
             <Text style={styles.emptyText}>ไม่มีรายการแจ้งซ่อม</Text>
           ) : (
-            stats.reportList.map((r, idx) => (
-              <View key={r.id || idx} style={styles.reportCard}>
+            reports.map((r, idx) => (
+              <View key={r._id || idx} style={[styles.reportCard, { backgroundColor: theme.card }]}>
                 <Text style={styles.reportFacility}>
                   อุปกรณ์: {r.facility || '-'}
                 </Text>
                 <Text>รายละเอียด: {r.description || '-'}</Text>
                 <Text>
-                  สถานะ: {r.status === 'new'
-                    ? 'รอรับเรื่อง'
-                    : r.status === 'in-progress'
-                    ? 'กำลังดำเนินการ'
-                    : 'สำเร็จแล้ว'}
+                  สถานะ: {STATUS_LABEL[r.status] || r.status}
                 </Text>
                 <Text>วันที่แจ้ง: {formatDate(r.created_at)}</Text>
               </View>
-            ))
-          )}
-          <Text style={styles.sectionTitle}>วันที่แจ้งซ่อม</Text>
-          {stats.dates.length === 0 ? (
-            <Text style={styles.emptyText}>-</Text>
-          ) : (
-            stats.dates.map((date, i) => (
-              <Text key={i} style={styles.dateText}>{formatDate(date)}</Text>
             ))
           )}
         </View>
