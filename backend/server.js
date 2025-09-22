@@ -1,4 +1,3 @@
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -169,6 +168,18 @@ const reportSchema = new mongoose.Schema({
     updated_at: { type: Date, default: Date.now }
 });
 const Report = mongoose.model('Report', reportSchema);
+
+// --- RoomDeletionLog schema (เพิ่มไว้หลัง Report model) ---
+const roomDeletionLogSchema = new mongoose.Schema({
+  room_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Room' },
+  room_number: String,
+  deleted_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  deleted_by_username: String,
+  reason: String,
+  force: { type: Boolean, default: false },
+  created_at: { type: Date, default: Date.now }
+});
+const RoomDeletionLog = mongoose.model('RoomDeletionLog', roomDeletionLogSchema);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secretkey';
 
@@ -425,4 +436,70 @@ app.patch('/api/rooms/:id', authenticateToken, requireAdmin, async (req, res) =>
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
+});
+
+// DELETE room (admin) - check occupancy / assigned users before deleting, support force + reason, save deletion log
+app.delete('/api/rooms/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const room = await Room.findById(req.params.id);
+    if (!room) return res.status(404).json({ message: 'Room not found' });
+
+    // read force/reason from body (axios.delete allows data) or query
+    const force = !!(req.body?.force || req.query?.force === 'true');
+    const reason = (req.body?.reason || req.query?.reason || '').trim();
+
+    // ตรวจสอบผู้ใช้อ้างถึงห้อง
+    const assignedCount = await User.countDocuments({
+      $or: [
+        { room_number: room.room_number },
+        { room_id: room._id }
+      ]
+    });
+
+    // หาก occupied หรือ assigned users และไม่ได้ใช้ force -> ห้ามลบ
+    if ((room.occupied || assignedCount > 0) && !force) {
+      return res.status(400).json({ message: 'ไม่สามารถลบห้องที่ยังมีผู้เช่าหรือมีผู้ถูกกำหนดให้ โปรดใช้ Force delete หากต้องการลบ' });
+    }
+
+    // ถ้าใช้ force ต้องมีเหตุผล
+    if (force && !reason) {
+      return res.status(400).json({ message: 'ต้องระบุเหตุผลเมื่อใช้ Force delete' });
+    }
+
+    const roomNumber = room.room_number;
+
+    // ลบห้อง
+    await Room.findByIdAndDelete(req.params.id);
+
+    // ลบรายงานที่เกี่ยวข้อง
+    if (roomNumber) {
+      await Report.deleteMany({ room_number: roomNumber });
+    }
+
+    // unset room references ใน User (fallback)
+    await User.updateMany(
+      { $or: [{ room_number: roomNumber }, { room_id: room._id }] },
+      { $unset: { room_number: "", room_id: "" } }
+    );
+
+    // บันทึก log การลบ
+    try {
+      const adminId = req.user?._id || req.user?.id || null;
+      const adminUsername = req.user?.username || null;
+      await RoomDeletionLog.create({
+        room_id: room._id,
+        room_number: roomNumber,
+        deleted_by: adminId,
+        deleted_by_username: adminUsername,
+        reason,
+        force
+      });
+    } catch (logErr) {
+      console.warn('Room deletion logged failed:', logErr.message);
+    }
+
+    return res.json({ message: 'Room deleted', room_number: roomNumber });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
 });

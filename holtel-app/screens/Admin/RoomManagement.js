@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useContext } from 'react';
-import { View, Text, Button, FlatList, TouchableOpacity, Modal, ScrollView, StyleSheet, Switch, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useState, useContext, useMemo } from 'react';
+import { View, Text, Button, FlatList, TouchableOpacity, Modal, ScrollView, StyleSheet, Switch, ActivityIndicator, Alert, TextInput } from 'react-native';
 import Input from '../../components/Input';
 import axios from 'axios';
 import { AuthContext } from '../AuthContext';
@@ -21,6 +21,17 @@ const RoomManagement = () => {
   const [roomNumber, setRoomNumber] = useState('');
   const [floor, setFloor] = useState('1');
   const [occupied, setOccupied] = useState(false);
+
+  // search states
+  const [searchText, setSearchText] = useState('');
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
+
+  // delete modal states
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [forceDelete, setForceDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchRooms = async () => {
     setLoading(true);
@@ -54,16 +65,16 @@ const RoomManagement = () => {
       floor: Number(floor),
       occupied: !!occupied
     };
-      try {
-        if (editRoom) {
-          await axios.put(`http://localhost:5001/api/rooms/${editRoom._id || editRoom.id}`, payload, {
-            headers: { Authorization: `Bearer ${auth.token}` }
-          });
-        } else {
-          await axios.post('http://localhost:5001/api/rooms', payload, {
-            headers: { Authorization: `Bearer ${auth.token}` }
-          });
-        }
+    try {
+      if (editRoom) {
+        await axios.put(`http://localhost:5001/api/rooms/${editRoom._id || editRoom.id}`, payload, {
+          headers: { Authorization: `Bearer ${auth.token}` }
+        });
+      } else {
+        await axios.post('http://localhost:5001/api/rooms', payload, {
+          headers: { Authorization: `Bearer ${auth.token}` }
+        });
+      }
       setModalVisible(false);
       fetchRooms();
     } catch (err) {
@@ -77,11 +88,57 @@ const RoomManagement = () => {
         headers: { Authorization: `Bearer ${auth.token}` }
       });
       // update local list
-      setRooms(curr => curr.map(r => (r._id === room._id ? res.data : r)));
+      setRooms(curr => curr.map(r => ((r._id || r.id) === (room._id || room.id) ? res.data : r)));
     } catch (err) {
       Alert.alert('Error', 'ไม่สามารถเปลี่ยนสถานะได้');
     }
   };
+
+  // replace confirmDelete -> open modal to ask reason / force
+  const confirmDelete = (room) => {
+    setRoomToDelete(room);
+    setDeleteReason('');
+    setForceDelete(false);
+    setDeleteModalVisible(true);
+  };
+
+  const performDelete = async ({ room, force = false, reason = '' }) => {
+    if (force && (!reason || !reason.trim())) {
+      Alert.alert('ต้องระบุเหตุผล', 'กรุณาใส่เหตุผลสำหรับการลบแบบบังคับ');
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      // axios.delete with body: use { data: {...} } second param
+      await axios.delete(`http://localhost:5001/api/rooms/${room._id || room.id}`, {
+        headers: { Authorization: `Bearer ${auth.token}` },
+        data: { force, reason }
+      });
+      // remove from local state immediately
+      setRooms(curr => curr.filter(r => (r._id || r.id) !== (room._id || room.id)));
+      setDeleteModalVisible(false);
+      Alert.alert('สำเร็จ', 'ลบห้องเรียบร้อยแล้ว');
+    } catch (err) {
+      Alert.alert('เกิดข้อผิดพลาด', err.response?.data?.message || 'ไม่สามารถลบห้องได้');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // derived filtered list based on search and availability
+  const filteredRooms = useMemo(() => {
+    const q = (searchText || '').trim().toLowerCase();
+    return rooms.filter(r => {
+      if (onlyAvailable && r.occupied) return false;
+      if (!q) return true;
+      // match room_number, floor or id
+      if (String(r.room_number).toLowerCase().includes(q)) return true;
+      if (r.floor && String(r.floor).toLowerCase().includes(q)) return true;
+      if (r._id && r._id.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [rooms, searchText, onlyAvailable]);
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
@@ -98,6 +155,8 @@ const RoomManagement = () => {
       </View>
       <View style={styles.actions}>
         <Button title="แก้ไข" onPress={() => openModal(item)} />
+        <View style={{ width: 12 }} />
+        <Button title="ลบ" color="#d9534f" onPress={() => confirmDelete(item)} />
       </View>
     </View>
   );
@@ -107,11 +166,33 @@ const RoomManagement = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }] }>
       <Text style={styles.header}>จัดการห้อง</Text>
+
+      {/* Search + filter */}
+      <View style={styles.searchWrap}>
+        <Input
+          placeholder="ค้นหาเลขห้อง หรือชั้น..."
+          value={searchText}
+          onChangeText={setSearchText}
+          style={{ marginBottom: 8 }}
+        />
+        <View style={styles.searchRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Switch value={onlyAvailable} onValueChange={setOnlyAvailable} />
+            <Text style={{ marginLeft: 8 }}>แสดงเฉพาะห้องว่าง</Text>
+          </View>
+          <TouchableOpacity onPress={() => { setSearchText(''); setOnlyAvailable(false); }}>
+            <Text style={{ color: theme.primary, fontWeight: '700' }}>ล้าง</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.countText}>แสดง {filteredRooms.length} จาก {rooms.length} ห้อง</Text>
+      </View>
+
       <TouchableOpacity style={styles.addBtn} onPress={() => openModal(null)}>
         <Text style={styles.addBtnText}>+ เพิ่มห้องใหม่</Text>
       </TouchableOpacity>
+
       <FlatList
-        data={rooms}
+        data={filteredRooms}
         keyExtractor={item => item._id || item.id || String(item.room_number)}
         renderItem={renderItem}
         style={{marginTop: 12}}
@@ -137,6 +218,44 @@ const RoomManagement = () => {
           </View>
         </ScrollView>
       </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal visible={deleteModalVisible} animationType="slide" transparent>
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalContent}>
+            <Text style={styles.modalHeader}>ยืนยันการลบห้อง</Text>
+            <Text style={{marginBottom:8}}>ห้อง: {roomToDelete?.room_number}</Text>
+
+            <View style={{flexDirection:'row', alignItems:'center', marginBottom:8}}>
+              <Switch value={forceDelete} onValueChange={setForceDelete} />
+              <Text style={{marginLeft:8}}>Force delete (ลบแม้มีผู้เช่า/ผู้ที่อ้างถึง)</Text>
+            </View>
+
+            {forceDelete && (
+              <>
+                <Text style={{marginBottom:6}}>ระบุเหตุผลสำหรับการลบ (จำเป็นเมื่อใช้ Force)</Text>
+                <TextInput
+                  value={deleteReason}
+                  onChangeText={setDeleteReason}
+                  style={styles.reasonInput}
+                  placeholder="เหตุผล..."
+                  multiline
+                />
+              </>
+            )}
+
+            <View style={{flexDirection:'row', justifyContent:'space-between', width:'100%'}}>
+              <Button title="ยกเลิก" onPress={() => setDeleteModalVisible(false)} />
+              <Button
+                title={deleting ? "กำลังลบ..." : "ลบ"}
+                color="#d9534f"
+                onPress={() => performDelete({ room: roomToDelete, force: forceDelete, reason: deleteReason })}
+                disabled={deleting}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -153,8 +272,38 @@ const styles = StyleSheet.create({
   modalContent: { padding: 16, alignItems: 'stretch' },
   modalHeader: { fontSize: 20, fontWeight: '800', color: theme.primary, marginBottom: 12 },
   input: { borderWidth: 1, borderColor: '#eee', padding: 10, borderRadius: 8, marginBottom: 8, backgroundColor: '#fff' },
-  addBtn: { backgroundColor: theme.primary, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, alignSelf: 'flex-start' },
-  addBtnText: { color: '#fff', fontWeight: '700' }
+  addBtn: { backgroundColor: theme.primary, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, alignSelf: 'flex-start', marginTop: 8 },
+  addBtnText: { color: '#fff', fontWeight: '700' },
+
+  /* search styles */
+  searchWrap: { width: '100%', maxWidth: 420, marginBottom: 8 },
+  searchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  countText: { marginTop: 6, color: theme.muted },
+
+  /* delete modal styles */
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  deleteModalContent: {
+    width: '90%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    elevation: 6,
+  },
+  reasonInput: {
+    minHeight: 80,
+    borderColor: '#eee',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 12,
+    textAlignVertical: 'top'
+  },
 });
 
 export default RoomManagement;
